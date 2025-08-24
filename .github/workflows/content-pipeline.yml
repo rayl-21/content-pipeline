@@ -26,7 +26,7 @@ jobs:
     
     - name: Create credentials file
       run: |
-        echo '${{ secrets.GOOGLE_CREDENTIALS }}' > content-pipeline-bot-key.json
+        echo '${{ secrets.GOOGLE_CREDENTIALS }}' > src/content-pipeline-bot-key.json
     
     - name: Run content pipeline
       run: |
