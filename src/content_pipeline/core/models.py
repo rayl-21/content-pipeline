@@ -1,6 +1,6 @@
 """Data models for the content pipeline."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
@@ -11,19 +11,39 @@ class Article:
     title: str
     url: str
     published_date: datetime
-    description: str
+    summary: str = ""
     content: str = ""
-    content_ideas: List[str] = None
+    author: str = ""
+    categories: List[str] = field(default_factory=list)
+    scraped: bool = False
     
-    def __post_init__(self):
-        if self.content_ideas is None:
-            self.content_ideas = []
+    # Legacy field mapping for backward compatibility
+    @property
+    def description(self) -> str:
+        """Legacy property mapping to summary."""
+        return self.summary
+    
+    @description.setter
+    def description(self, value: str):
+        """Legacy property setter mapping to summary."""
+        self.summary = value
 
 
 @dataclass
 class ContentIdea:
     """Represents a brainstormed content idea."""
     title: str
-    description: str
-    keywords: List[str]
-    content_type: str  # "blog", "social", "video", etc.
+    content_type: str  # "Blog Post", "Social Media Post", "Video Script", etc.
+    keywords: List[str] = field(default_factory=list)
+    source_articles: List[str] = field(default_factory=list)
+    themes: List[str] = field(default_factory=list)
+    description: str = ""
+    
+    def __post_init__(self):
+        """Ensure lists are properly initialized."""
+        if self.keywords is None:
+            self.keywords = []
+        if self.source_articles is None:
+            self.source_articles = []
+        if self.themes is None:
+            self.themes = []
