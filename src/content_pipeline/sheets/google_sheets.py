@@ -65,11 +65,12 @@ class GoogleSheetsManager:
             print(f"Google Sheets connection test failed: {e}")
             return False
     
-    def save_articles(self, articles: List[Article]) -> bool:
-        """Save articles to Google Sheets.
+    def save_articles(self, articles: List[Article], upsert: bool = True) -> bool:
+        """Save articles to Google Sheets with UPSERT logic.
         
         Args:
             articles: List of articles to save
+            upsert: If True, updates existing articles or adds new ones. If False, overwrites all.
             
         Returns:
             True if successful, False otherwise
@@ -81,32 +82,95 @@ class GoogleSheetsManager:
             # Get or create Articles worksheet
             worksheet = self._get_or_create_worksheet("Articles")
             
-            # Clear existing data
-            worksheet.clear()
-            
             # Prepare headers
             headers = [
                 "Title", "URL", "Published Date", "Author", 
-                "Summary", "Content", "Categories", "Scraped"
+                "Summary", "Content", "Categories", "Scraped", "Source", "Last Updated"
             ]
             
-            # Prepare data rows
-            rows = [headers]
-            for article in articles:
-                row = [
-                    article.title,
-                    article.url,
-                    article.published_date.strftime("%Y-%m-%d %H:%M:%S") if article.published_date else "",
-                    article.author or "",
-                    article.summary or "",
-                    (article.content or "")[:1000] + "..." if hasattr(article, 'content') and article.content and len(article.content) > 1000 else (article.content or ""),  # Truncate long content
-                    ", ".join(article.categories) if article.categories else "",
-                    str(getattr(article, 'scraped', False))
-                ]
-                rows.append(row)
-            
-            # Update the worksheet
-            worksheet.update(rows, value_input_option='USER_ENTERED')
+            if upsert:
+                # Get existing data
+                try:
+                    existing_data = worksheet.get_all_values()
+                    if existing_data and len(existing_data) > 0:
+                        # Skip header row
+                        existing_rows = existing_data[1:] if len(existing_data) > 1 else []
+                    else:
+                        existing_rows = []
+                        worksheet.clear()
+                        worksheet.append_row(headers)
+                except:
+                    existing_rows = []
+                    worksheet.clear()
+                    worksheet.append_row(headers)
+                
+                # Create a dictionary of existing articles by URL for quick lookup
+                existing_articles = {}
+                row_numbers = {}
+                for idx, row in enumerate(existing_rows, start=2):  # Start from row 2 (after header)
+                    if len(row) > 1:  # Make sure row has URL column
+                        url = row[1]
+                        existing_articles[url] = row
+                        row_numbers[url] = idx
+                
+                # Process new articles
+                updates = []  # List of (row_number, row_data) for batch update
+                new_rows = []  # New articles to append
+                
+                for article in articles:
+                    row = [
+                        article.title,
+                        article.url,
+                        article.published_date.strftime("%Y-%m-%d %H:%M:%S") if article.published_date else "",
+                        article.author or "",
+                        article.summary or "",
+                        (article.content or "")[:1000] + "..." if hasattr(article, 'content') and article.content and len(article.content) > 1000 else (article.content or ""),
+                        ", ".join(article.categories) if article.categories else "",
+                        str(getattr(article, 'scraped', False)),
+                        getattr(article, 'source', ''),
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    ]
+                    
+                    if article.url in existing_articles:
+                        # Update existing article
+                        row_num = row_numbers[article.url]
+                        updates.append((row_num, row))
+                    else:
+                        # Add new article
+                        new_rows.append(row)
+                
+                # Perform batch updates for existing articles
+                for row_num, row_data in updates:
+                    cell_range = f'A{row_num}:J{row_num}'
+                    worksheet.update(cell_range, [row_data], value_input_option='USER_ENTERED')
+                
+                # Append new articles
+                if new_rows:
+                    worksheet.append_rows(new_rows, value_input_option='USER_ENTERED')
+                    
+            else:
+                # Clear and rewrite all data (original behavior)
+                worksheet.clear()
+                
+                # Prepare data rows
+                rows = [headers]
+                for article in articles:
+                    row = [
+                        article.title,
+                        article.url,
+                        article.published_date.strftime("%Y-%m-%d %H:%M:%S") if article.published_date else "",
+                        article.author or "",
+                        article.summary or "",
+                        (article.content or "")[:1000] + "..." if hasattr(article, 'content') and article.content and len(article.content) > 1000 else (article.content or ""),
+                        ", ".join(article.categories) if article.categories else "",
+                        str(getattr(article, 'scraped', False)),
+                        getattr(article, 'source', ''),
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    ]
+                    rows.append(row)
+                
+                # Update the worksheet
+                worksheet.update(rows, value_input_option='USER_ENTERED')
             
             # Format headers
             worksheet.format('1:1', {
