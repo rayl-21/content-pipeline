@@ -46,10 +46,14 @@ class WebScraper:
         '#entry-content',  # FreightWaves specific ID
         '.entry-content',  # FreightWaves and WordPress sites
         'div.entry-content',
+        'article.post',  # FreightCaviar and Ghost blogs
         'article[role="main"]',
+        'main article.post',  # More specific for FreightCaviar
         'main article',
         'div.article-content',
         'div.post-content',
+        'div.content-body',  # Additional content patterns
+        'section.post-content',
         'div.content',
         'article',
         'main',
@@ -261,12 +265,21 @@ class WebScraper:
         """
         soup = BeautifulSoup(html, 'html.parser')
         
+        # First, check if this is a paywalled or gated content page
+        # Look for common paywall indicators
+        paywall_indicators = ['iframe.omedagate', '.paywall', '.subscriber-only', '.premium-content']
+        for indicator in paywall_indicators:
+            if soup.select_one(indicator):
+                logger.debug(f"Paywall/gated content detected: {indicator}")
+                # Still try to extract what's available
+                break
+        
         # Try each selector until we find content
         for selector in self.CONTENT_SELECTORS:
             element = soup.select_one(selector)
             if element:
                 # Remove unwanted elements
-                for tag in element.select('script, style, nav, header, footer, aside'):
+                for tag in element.select('script, style, nav, header, footer, aside, .related-posts, .newsletter-signup'):
                     tag.decompose()
                 
                 # Get text and clean it
@@ -276,13 +289,43 @@ class WebScraper:
                     logger.debug(f"Using selector '{selector}' for content extraction")
                     return self._clean_text(text)
         
+        # Enhanced fallback: Try article.post specifically for FreightCaviar
+        article_post = soup.select_one('article.post')
+        if article_post:
+            # Remove unwanted elements
+            for tag in article_post.select('script, style, nav, header, footer, aside'):
+                tag.decompose()
+            text = article_post.get_text(separator='\n', strip=True)
+            logger.debug(f"article.post selector found {len(text)} chars")
+            if len(text) > 100:
+                logger.debug("Using article.post for content extraction")
+                return self._clean_text(text)
+        
+        # Check if this might be a landing/index page (multiple article cards)
+        article_cards = soup.select('.post-card, .article-card, .entry-card')
+        if len(article_cards) > 2:
+            logger.debug(f"Detected landing page with {len(article_cards)} article cards")
+            # This is likely not an article page, return empty
+            return ""
+        
         # Fallback: get all paragraphs
         paragraphs = soup.find_all('p')
         logger.debug(f"Found {len(paragraphs)} paragraph tags")
         if paragraphs:
-            text = '\n'.join(p.get_text(strip=True) for p in paragraphs)
-            logger.debug(f"Paragraphs contain {len(text)} chars of text")
+            # Filter out very short paragraphs (likely navigation or metadata)
+            valid_paragraphs = [p for p in paragraphs if len(p.get_text(strip=True)) > 30]
+            if valid_paragraphs:
+                text = '\n'.join(p.get_text(strip=True) for p in valid_paragraphs)
+                logger.debug(f"Valid paragraphs contain {len(text)} chars of text")
+                if len(text) > 100:
+                    return self._clean_text(text)
+        
+        # Final fallback: Check for any content div/section
+        content_containers = soup.select('div.content, section.content, div.article-body, section.article-body')
+        for container in content_containers:
+            text = container.get_text(separator='\n', strip=True)
             if len(text) > 100:
+                logger.debug(f"Found content in fallback container: {len(text)} chars")
                 return self._clean_text(text)
         
         logger.warning("No content could be extracted from any selector")

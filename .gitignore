@@ -85,3 +85,4 @@ content-pipeline-bot-key.json
 
 # Backup files
 .claude.backup-*/
+backups/
