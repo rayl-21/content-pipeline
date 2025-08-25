@@ -16,6 +16,7 @@ class Article:
     author: str = ""
     categories: List[str] = field(default_factory=list)
     scraped: bool = False
+    source: str = ""  # Source feed name (e.g., "FreightWaves", "FreightCaviar")
     
     # Legacy field mapping for backward compatibility
     @property

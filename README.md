@@ -1,15 +1,16 @@
 # Content Pipeline
 
-A Python application that monitors logistics and supply chain news from RSS feeds, scrapes article content, generates content ideas, and saves results to Google Sheets.
+A Python application that monitors logistics and supply chain news from multiple RSS feeds (FreightWaves and FreightCaviar), scrapes article content, generates content ideas, and saves results to Google Sheets.
 
 ## Features
 
-- 📡 **RSS Feed Monitoring**: Monitors FreightWaves and other logistics news sources
+- 📡 **Multi-Feed RSS Monitoring**: Monitors FreightWaves and FreightCaviar RSS feeds with configurable article limits
 - 🕷️ **Web Scraping**: Extracts full article content from web pages  
 - 💡 **Content Brainstorming**: Generates content ideas based on trending topics and keywords
 - 📊 **Google Sheets Integration**: Automatically saves results to Google Sheets
 - 🤖 **GitHub Actions**: Automated pipeline execution every 6 hours
-- 📈 **Analytics**: Summary reports and metrics
+- 📈 **Analytics**: Summary reports and metrics by feed source
+- ⚙️ **Configurable**: Command-line options for article limits and feed selection
 
 ## Success Criteria ✅
 
@@ -50,14 +51,21 @@ pip install -r requirements.txt
 
 ### Usage
 
-Run the demo:
-```bash
-python demo.py
-```
-
-Run the full pipeline:
+Run the pipeline with default settings (5 articles from each feed):
 ```bash
 python src/content_pipeline/main.py
+```
+
+Configure article limits per feed:
+```bash
+# Fetch 10 articles from FreightWaves, 3 from FreightCaviar
+python src/content_pipeline/main.py --freightwaves-limit 10 --freightcaviar-limit 3
+
+# Disable a specific feed
+python src/content_pipeline/main.py --disable-freightcaviar
+
+# View all options
+python src/content_pipeline/main.py --help
 ```
 
 ## Project Structure
@@ -65,6 +73,7 @@ python src/content_pipeline/main.py
 ```
 src/content_pipeline/
 ├── main.py                 # Main application orchestrator
+├── config.py               # Configuration for feeds and settings
 ├── core/models.py          # Data models (Article, ContentIdea)
 ├── scrapers/
 │   ├── rss_monitor.py      # RSS feed monitoring
