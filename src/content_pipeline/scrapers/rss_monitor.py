@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from content_pipeline.core.models import Article
+from ..core.models import Article, SourceFeed
 
 
 class RSSMonitor:
@@ -90,27 +90,35 @@ class RSSMonitor:
                     pass
             
             # Extract summary/description
-            summary = ''
+            description = ''
             if hasattr(entry, 'summary'):
-                summary = entry.summary
+                description = entry.summary
             elif hasattr(entry, 'description'):
-                summary = entry.description
+                description = entry.description
             
             # Extract author
-            author = getattr(entry, 'author', 'Unknown')
+            author = getattr(entry, 'author', '')
             
             # Extract categories/tags
             categories = []
             if hasattr(entry, 'tags'):
                 categories = [tag.term for tag in entry.tags if hasattr(tag, 'term')]
             
+            # Determine source feed from URL
+            source_feed = SourceFeed.CUSTOM
+            if 'freightwaves' in url.lower():
+                source_feed = SourceFeed.FREIGHT_WAVES
+            elif 'freightcaviar' in url.lower():
+                source_feed = SourceFeed.FREIGHT_CAVIAR
+            
             return Article(
                 title=title,
                 url=url,
                 published_date=published_date,
-                summary=summary,
+                description=description,  # Using standardized field name
                 author=author,
-                categories=categories
+                categories=categories,
+                source_feed=source_feed  # Add source feed
             )
             
         except Exception as e:

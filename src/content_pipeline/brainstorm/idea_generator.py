@@ -4,7 +4,7 @@ import re
 from typing import List, Set, Dict
 from collections import Counter
 
-from content_pipeline.core.models import Article, ContentIdea
+from ..core.models import Article, ContentIdea, ContentType
 
 
 class IdeaGenerator:
@@ -177,7 +177,7 @@ class IdeaGenerator:
             idea_keywords.extend(article_keywords[:5])
             
             idea = ContentIdea(
-                title=idea_title,
+                idea_title=idea_title,  # Using standardized field name
                 content_type=self._select_content_type(template),
                 keywords=list(set(idea_keywords)),
                 source_articles=[article.url],
@@ -211,8 +211,8 @@ class IdeaGenerator:
                 
                 for idea_title in theme_ideas:
                     idea = ContentIdea(
-                        title=idea_title,
-                        content_type="Newsletter",
+                        idea_title=idea_title,  # Using standardized field name
+                        content_type=ContentType.NEWSLETTER,  # Using enum
                         keywords=keywords[:10],
                         source_articles=[article.url for article in articles],
                         themes=[theme]
@@ -240,23 +240,29 @@ class IdeaGenerator:
         
         return clean_title.title()
     
-    def _select_content_type(self, template: str) -> str:
+    def _select_content_type(self, template: str) -> ContentType:
         """Select appropriate content type based on template.
         
         Args:
             template: Idea template
             
         Returns:
-            Content type
+            Content type enum
         """
-        if "takeaways" in template.lower() or "key" in template.lower():
-            return "Listicle"
-        elif "deep dive" in template.lower() or "understanding" in template.lower():
-            return "Blog Post"
-        elif "breaking down" in template.lower():
-            return "Tutorial"
+        template_lower = template.lower()
+        
+        if "takeaways" in template_lower or "key" in template_lower:
+            return ContentType.INFOGRAPHIC  # Listicles work well as infographics
+        elif "deep dive" in template_lower or "understanding" in template_lower:
+            return ContentType.BLOG_POST
+        elif "breaking down" in template_lower or "how to" in template_lower:
+            return ContentType.BLOG_POST  # Tutorials are blog posts
+        elif "video" in template_lower:
+            return ContentType.VIDEO
+        elif "podcast" in template_lower or "interview" in template_lower:
+            return ContentType.PODCAST
         else:
-            return "Blog Post"
+            return ContentType.BLOG_POST
     
     def _deduplicate_ideas(self, ideas: List[ContentIdea]) -> List[ContentIdea]:
         """Remove duplicate ideas and sort by relevance.
@@ -271,8 +277,8 @@ class IdeaGenerator:
         unique_ideas = []
         
         for idea in ideas:
-            if idea.title not in seen_titles:
-                seen_titles.add(idea.title)
+            if idea.idea_title not in seen_titles:  # Using standardized field name
+                seen_titles.add(idea.idea_title)
                 unique_ideas.append(idea)
         
         # Sort by number of keywords (more keywords = more relevant)

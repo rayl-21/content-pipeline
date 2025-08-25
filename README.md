@@ -204,6 +204,102 @@ python demo.py
 3. Test RSS feed accessibility manually
 4. Validate JSON credentials format (must be valid JSON)
 
+## Data Models
+
+### Standardized Schema
+
+The content pipeline uses standardized data models with validation, type safety, and consistent formatting across Python and Google Sheets.
+
+#### Articles Table
+
+| Field | Type | Description | Constraints |
+|-------|------|-------------|-------------|
+| `id` | UUID | Unique identifier | Auto-generated |
+| `url` | URL | Article URL | Required, validated, unique |
+| `title` | String | Article title | Required, max 500 chars |
+| `description` | Text | Article summary | Optional |
+| `content` | Text | Full article content | Optional, unlimited |
+| `author` | String | Article author | Optional, max 200 chars |
+| `published_date` | DateTime | Publication date | Required, ISO format |
+| `source_feed` | Enum | Feed source | FreightWaves, FreightCaviar, Custom |
+| `scraping_strategy` | Enum | Strategy used | basic, enhanced, cloudscraper, mcp_playwright, none |
+| `scraping_success` | Boolean | Scraping result | True/False |
+| `created_at` | DateTime | Added to system | Auto-generated |
+| `updated_at` | DateTime | Last update | Auto-updated |
+| `word_count` | Integer | Content word count | Auto-calculated |
+| `keywords` | List | Keywords/tags | Optional, comma-separated |
+| `categories` | List | Article categories | Optional, comma-separated |
+
+#### Content Ideas Table
+
+| Field | Type | Description | Constraints |
+|-------|------|-------------|-------------|
+| `id` | UUID | Unique identifier | Auto-generated |
+| `idea_title` | String | Idea title | Required, max 200 chars |
+| `idea_description` | Text | Detailed description | Optional |
+| `target_audience` | String | Target audience | Optional, max 100 chars |
+| `content_type` | Enum | Content format | blog, video, infographic, podcast, social_media, newsletter, whitepaper |
+| `priority` | Enum | Priority level | high, medium, low |
+| `keywords` | List | SEO keywords | Optional, comma-separated |
+| `source_articles` | List | Article IDs | References to articles |
+| `created_at` | DateTime | Creation date | Auto-generated |
+| `status` | Enum | Idea status | proposed, in_progress, completed, rejected, on_hold |
+| `themes` | List | Content themes | Optional, comma-separated |
+
+#### Summary Report Table
+
+| Field | Type | Description | Constraints |
+|-------|------|-------------|-------------|
+| `run_id` | UUID | Pipeline run ID | Auto-generated |
+| `run_date` | DateTime | Execution date | Required |
+| `total_articles_fetched` | Integer | Articles processed | Required |
+| `articles_scraped_successfully` | Integer | Successful scrapes | Required |
+| `scraping_success_rate` | Percentage | Success rate | Auto-calculated |
+| `ideas_generated` | Integer | Ideas created | Required |
+| `processing_time_seconds` | Float | Execution time | Optional |
+| `errors` | JSON | Error log | JSON array |
+| `feed_statistics` | JSON | Per-feed metrics | JSON object |
+
+### Data Validation
+
+All data models include:
+- **URL Validation**: Ensures valid URL format with scheme and netloc
+- **Text Sanitization**: Removes control characters, normalizes whitespace
+- **Length Constraints**: Enforces maximum lengths for fields
+- **Enum Validation**: Ensures categorical values match allowed options
+- **Automatic Calculations**: Word count, success rates, timestamps
+
+### Backward Compatibility
+
+Legacy field mappings are maintained for seamless migration:
+- `summary` → `description` (Article)
+- `scraped` → `scraping_success` (Article)
+- `source` → `source_feed` (Article)
+- `title` → `idea_title` (ContentIdea)
+- `description` → `idea_description` (ContentIdea)
+
+### Data Purge and Migration
+
+A one-time purge script is available to standardize existing data:
+
+```bash
+# Backup only (safe exploration)
+python scripts/purge_sheets_data.py --backup-only
+
+# Full purge and setup (destructive)
+python scripts/purge_sheets_data.py
+
+# Purge and migrate old data to new format
+python scripts/purge_sheets_data.py --migrate
+```
+
+The purge script will:
+1. Create timestamped backups in `backups/` directory
+2. Clear all existing sheets
+3. Set up standardized headers
+4. Optionally migrate old data to new format
+5. Maintain data integrity throughout
+
 ## Architecture Overview
 
 ### Core Components
