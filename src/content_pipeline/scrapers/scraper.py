@@ -373,7 +373,7 @@ class WebScraper:
 
 
 # Factory function for backward compatibility
-def create_scraper(strategy: str = "basic", **kwargs) -> WebScraper:
+def create_scraper(strategy: str = "enhanced", **kwargs) -> WebScraper:
     """Create a web scraper with the specified strategy.
     
     Args:
@@ -381,7 +381,7 @@ def create_scraper(strategy: str = "basic", **kwargs) -> WebScraper:
         **kwargs: Additional arguments for WebScraper
         
     Returns:
-        Configured WebScraper instance
+        Configured WebScraper instance with robust defaults
     """
     strategy_map = {
         'basic': ScrapingStrategy.BASIC,
@@ -393,5 +393,17 @@ def create_scraper(strategy: str = "basic", **kwargs) -> WebScraper:
         'unified': ScrapingStrategy.ENHANCED,  # Default unified behavior
     }
     
-    scraping_strategy = strategy_map.get(strategy, ScrapingStrategy.BASIC)
-    return WebScraper(strategy=scraping_strategy, **kwargs)
+    scraping_strategy = strategy_map.get(strategy, ScrapingStrategy.ENHANCED)
+    
+    # Set robust defaults for production reliability
+    defaults = {
+        'delay': 2.0,  # Increased from 1.0 to avoid rate limiting
+        'timeout': 20,  # Increased from 10 for slower connections
+        'max_retries': 5  # Increased from 3 for better resilience
+    }
+    
+    # Override defaults with provided kwargs
+    for key, value in kwargs.items():
+        defaults[key] = value
+    
+    return WebScraper(strategy=scraping_strategy, **defaults)

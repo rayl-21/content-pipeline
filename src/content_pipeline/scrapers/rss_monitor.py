@@ -29,7 +29,11 @@ class RSSMonitor:
             True if feed is accessible, False otherwise
         """
         try:
-            response = requests.get(self.feed_url, timeout=self.timeout)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (compatible; ContentPipeline/1.0)',
+                'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+            }
+            response = requests.get(self.feed_url, timeout=self.timeout, headers=headers)
             return response.status_code == 200
         except Exception:
             return False
@@ -44,6 +48,9 @@ class RSSMonitor:
             List of Article objects
         """
         try:
+            # Set user agent for feedparser for better compatibility
+            feedparser.USER_AGENT = "Mozilla/5.0 (compatible; ContentPipeline/1.0)"
+            
             # Parse the RSS feed
             feed = feedparser.parse(self.feed_url)
             

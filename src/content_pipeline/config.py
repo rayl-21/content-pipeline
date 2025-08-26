@@ -23,9 +23,9 @@ class PipelineConfig:
     credentials_path: str = "content-pipeline-bot-key.json"
     spreadsheet_id: str = "1t01HICK7cCGFK2XDebagMjjfSnN0t04t_c8o0IJh7lQ"
     
-    # Scraping configuration
-    scraper_delay: float = 1.0
-    scraper_timeout: int = 10
+    # Scraping configuration - Updated for production reliability
+    scraper_delay: float = 2.0  # Increased from 1.0 to avoid rate limiting
+    scraper_timeout: int = 20  # Increased from 10 for slower connections
     
     # Default article limit if not specified per feed
     default_article_limit: int = 5
