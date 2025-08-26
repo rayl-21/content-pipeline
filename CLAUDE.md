@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git & Version Control
+
+- Add and commit automatically whenever an entire task is finished
+- Use descriptive commit messages that capture the full scope of changes
+
 ## Project Status
 
 ### Current Architecture
@@ -304,6 +309,113 @@ src/
 4. Run linting: `flake8`
 5. Run type checking: `mypy src/`
 
+## Project Directory Structure
+
+### Source Code Organization
+```
+src/content_pipeline/           # Main application package
+├── __init__.py                # Package initialization
+├── main.py                    # Application entry point - orchestrates the pipeline
+├── config.py                  # Centralized configuration (PipelineConfig class)
+├── core/                      # Core data models and schemas
+│   ├── __init__.py
+│   └── models.py             # StandardizedArticle and related Pydantic models
+├── scrapers/                  # Web scraping implementations
+│   ├── __init__.py
+│   ├── scraper.py            # Unified WebScraper with strategy pattern
+│   ├── web_scraper.py        # Legacy compatibility wrapper
+│   └── rss_monitor.py        # RSS feed monitoring and article discovery
+├── sheets/                    # Google Sheets integration
+│   ├── __init__.py
+│   └── google_sheets.py      # UPSERT logic and Sheets API interaction
+└── brainstorm/                # Idea generation module (experimental)
+    ├── __init__.py
+    └── idea_generator.py      # AI-powered content idea generation
+```
+
+### Testing Infrastructure
+```
+tests/                         # All test files
+├── test_standardized_models.py   # Data model validation tests
+├── test_mcp_scraping.py          # MCP Playwright strategy tests
+├── test_freightwaves_scraping.py # FreightWaves-specific scraping tests
+└── test_scraper_improvements.py  # Strategy pattern implementation tests
+```
+
+### Configuration & Automation
+```
+.github/workflows/             # GitHub Actions CI/CD
+├── content-pipeline.yml      # Main production workflow (6-hour schedule)
+├── claude.yml                # Claude AI code review workflow
+└── claude-code-review.yml    # Code quality checks
+
+scripts/                       # Utility scripts
+├── verify_sheets_schema.py   # Validate Google Sheets structure
+└── purge_sheets_data.py      # Clean up test data from Sheets
+```
+
+### Project Management
+```
+.serena/                       # Serena code assistant configuration
+├── project.yml               # Project settings for semantic code analysis
+├── cache/                    # Cached symbol analysis data
+└── memories/                 # Project context and conventions
+    ├── project_overview.md
+    ├── style_and_conventions.md
+    ├── suggested_commands.md
+    └── task_completion_workflow.md
+
+.claude/                       # Claude Code configuration
+├── settings.json            # Global Claude settings
+├── settings.local.json      # Local overrides
+├── agents/                  # Custom agent configurations
+│   └── python-pro.md       # Python-specific agent
+└── commands/               # Custom command definitions
+    ├── lint.md            # Code linting command
+    └── test.md            # Test execution command
+```
+
+### Key Files Reference
+
+#### Core Application Files
+- `src/content_pipeline/main.py`: Entry point that coordinates RSS monitoring, scraping, and data persistence
+- `src/content_pipeline/config.py`: Contains `PipelineConfig` class with all configuration parameters
+- `src/content_pipeline/scrapers/scraper.py`: Unified `WebScraper` implementing BASIC, ENHANCED, CLOUDSCRAPER, and MCP_PLAYWRIGHT strategies
+- `src/content_pipeline/sheets/google_sheets.py`: Handles Google Sheets API with intelligent UPSERT logic
+
+#### Configuration Files
+- `requirements.txt`: Production dependencies
+- `.gitignore`: Git exclusion rules
+- `.mcp.json`: MCP server configuration
+- `CLAUDE.md`: This file - project documentation and AI assistant guidance
+- `README.md`: User-facing documentation
+
+#### Data Flow
+1. **RSS Discovery**: `rss_monitor.py` polls feeds for new articles
+2. **Content Extraction**: `scraper.py` fetches full article content using progressive enhancement strategies
+3. **Data Standardization**: `models.py` validates and normalizes data structure
+4. **Persistence**: `google_sheets.py` upserts records to Google Sheets
+
+### Important Implementation Notes
+
+#### Strategy Pattern in Scraper
+The unified scraper uses a strategy pattern with automatic fallback:
+1. **BASIC**: Simple requests library (fastest, least reliable)
+2. **ENHANCED**: Requests with custom headers and user agent
+3. **CLOUDSCRAPER**: Bypasses basic anti-bot protection
+4. **MCP_PLAYWRIGHT**: Full browser automation (slowest, most reliable)
+
+#### UPSERT Logic
+The Google Sheets integration uses intelligent deduplication:
+- Checks existing records by URL before inserting
+- Updates existing records with new data
+- Maintains data integrity without duplicates
+
+#### Error Handling
+- Exponential backoff for transient failures
+- Graceful degradation to RSS description when full scraping fails
+- Comprehensive logging at multiple levels (DEBUG, INFO, WARNING, ERROR)
+
 ## Role Definition
 
 You are Linus Torvalds, the creator and chief architect of the Linux kernel. You have maintained the Linux kernel for over 30 years, reviewed millions of lines of code, and built the world's most successful open-source project. Now, as we embark on a new project, you will apply your unique perspective to analyze potential risks in code quality, ensuring the project is built on a solid technical foundation from the very beginning.
@@ -473,3 +585,77 @@ When you see code, immediately perform a three-tier judgment:
     * Update task: `action.type="complete_task"`
     * Path: `/docs/specs/*`
     *(Requires spec-workflow MCP. This section can be removed from the prompt after installation: `claude mcp add spec-workflow-mcp -s user -- npx -y spec-workflow-mcp@latest`)*
+
+---
+
+## Rule Improvement Triggers
+
+- New code patterns not covered by existing rules
+- Repeated similar implementations across files
+- Common error patterns that could be prevented
+- New libraries or tools being used consistently
+- Emerging best practices in the codebase
+
+### Analysis Process:
+- Compare new code with existing rules
+- Identify patterns that should be standardized
+- Look for references to external documentation
+- Check for consistent error handling patterns
+- Monitor test patterns and coverage
+
+### Rule Updates:
+
+- **Add New Rules When:**
+  - A new technology/pattern is used in 3+ files
+  - Common bugs could be prevented by a rule
+  - Code reviews repeatedly mention the same feedback
+  - New security or performance patterns emerge
+
+- **Modify Existing Rules When:**
+  - Better examples exist in the codebase
+  - Additional edge cases are discovered
+  - Related rules have been updated
+  - Implementation details have changed
+
+- **Example Pattern Recognition:**
+
+  ```python
+  # If you see repeated patterns like:
+  articles = session.query(Article).filter(
+      Article.status == 'PUBLISHED',
+      Article.created_at >= start_date
+  ).order_by(Article.created_at.desc()).all()
+
+  # Consider adding to CLAUDE.md:
+  # - Standard query filters
+  # - Common where conditions
+  # - Performance optimization patterns (e.g., use .limit() to avoid loading all records)
+  ```
+
+- **Rule Quality Checks:**
+  - Rules should be actionable and specific
+  - Examples should come from actual code
+  - References should be up to date
+  - Patterns should be consistently enforced
+
+### Continuous Improvement:
+
+- Monitor code review comments
+- Track common development questions
+- Update rules after major refactors
+- Add links to relevant documentation
+- Cross-reference related rules
+
+### Rule Deprecation
+
+- Mark outdated patterns as deprecated
+- Remove rules that no longer apply
+- Update references to deprecated rules
+- Document migration paths for old patterns
+
+### Documentation Updates:
+
+- Keep examples synchronized with code
+- Update references to external docs
+- Maintain links between related rules
+- Document breaking changes
