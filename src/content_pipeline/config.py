@@ -55,6 +55,16 @@ class PipelineConfig:
     def get_total_article_limit(self) -> int:
         """Get total number of articles to process across all feeds."""
         return sum(feed.article_limit for feed in self.get_enabled_feeds())
+    
+    def get_google_sheets_credentials_path(self) -> str:
+        """Get Google Sheets credentials path from environment or default."""
+        import os
+        return os.getenv('GOOGLE_SHEETS_CREDENTIALS_PATH', self.credentials_path)
+    
+    def get_google_sheets_spreadsheet_id(self) -> str:
+        """Get Google Sheets spreadsheet ID from environment or default."""
+        import os
+        return os.getenv('GOOGLE_SHEETS_SPREADSHEET_ID', self.spreadsheet_id)
 
 
 # Default configuration instance

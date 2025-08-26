@@ -28,12 +28,27 @@ jobs:
       run: |
         echo '${{ secrets.GOOGLE_CREDENTIALS }}' > src/content-pipeline-bot-key.json
     
+    - name: Check and migrate Google Sheets schema
+      run: |
+        cd src
+        python ../scripts/verify_sheets_schema.py || python ../scripts/migrate_sheets_schema.py --auto-confirm
+      env:
+        PYTHONPATH: ${{ github.workspace }}/src
+      continue-on-error: true
+    
     - name: Run content pipeline
       run: |
         cd src
-        python -m content_pipeline.main
+        python -m content_pipeline.main --strategy enhanced --log-level INFO
       env:
         PYTHONPATH: ${{ github.workspace }}/src
+    
+    - name: Format Google Sheets
+      run: |
+        python scripts/format_google_sheets.py
+      env:
+        PYTHONPATH: ${{ github.workspace }}/src
+      continue-on-error: true
     
     - name: Upload logs (on failure)
       if: failure()

@@ -1,6 +1,7 @@
 feedparser==6.0.11
 requests==2.31.0
 beautifulsoup4==4.12.2
+cloudscraper==1.2.71
 gspread==5.12.0
 google-auth==2.23.4
 google-auth-oauthlib==1.1.0

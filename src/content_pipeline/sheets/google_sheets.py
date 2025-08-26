@@ -1,18 +1,18 @@
 """Google Sheets integration for saving content pipeline results with standardized schema."""
 
 import json
+import logging
 import time
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any
 
 import gspread
 from google.oauth2.service_account import Credentials
 
-from ..core.models import (
-    Article, ContentIdea, SummaryReport,
-    SourceFeed, ScrapingStrategy, ContentType,
-    Priority, ContentStatus
-)
+from ..core.models import Article, ContentIdea, SummaryReport
+from .formatting import SheetFormatter
+
+logger = logging.getLogger(__name__)
 
 
 class GoogleSheetsManager:
@@ -208,7 +208,17 @@ class GoogleSheetsManager:
                 
                 # Append new articles
                 if new_rows:
+                    # Get the starting row for new data
+                    start_row = len(existing_rows) + 2  # +1 for header, +1 for next row
                     worksheet.append_rows(new_rows, value_input_option='USER_ENTERED')
+                    
+                    # Apply formatting to new rows
+                    end_row = start_row + len(new_rows) - 1
+                    SheetFormatter.format_new_rows(worksheet, start_row, end_row, 'articles')
+                    
+                    # Update filter to include new data
+                    total_rows = len(existing_rows) + len(new_rows) + 1  # +1 for header
+                    SheetFormatter.ensure_filter_includes_new_data(worksheet, total_rows)
                     
             else:
                 # Clear and rewrite all data
@@ -225,18 +235,20 @@ class GoogleSheetsManager:
                 
                 # Update worksheet
                 worksheet.update(rows, value_input_option='USER_ENTERED')
+                
+                # Apply formatting to all data rows
+                if len(rows) > 1:
+                    SheetFormatter.format_new_rows(worksheet, 2, len(rows), 'articles')
+                    SheetFormatter.ensure_filter_includes_new_data(worksheet, len(rows))
             
             # Format headers
             worksheet.format('1:1', {
-                'backgroundColor': {'red': 0.8, 'green': 0.8, 'blue': 0.8},
-                'textFormat': {'bold': True}
+                'backgroundColor': {'red': 0.2, 'green': 0.5, 'blue': 0.8},
+                'textFormat': {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}}
             })
             
-            # Auto-resize columns for better readability
-            try:
-                worksheet.columns_auto_resize(0, len(headers) - 1)
-            except:
-                pass  # Auto-resize might not be available in all versions
+            # Apply column widths
+            SheetFormatter.auto_resize_columns(worksheet, 'articles')
             
             print(f"Successfully saved {len(articles)} articles to Google Sheets")
             return True
@@ -325,11 +337,22 @@ class GoogleSheetsManager:
                 
                 worksheet.update(rows, value_input_option='USER_ENTERED')
             
+            # Get total rows for filter update
+            total_rows = len(worksheet.get_all_values())
+            
+            # Apply formatting to new data if appending
+            if total_rows > 1:
+                SheetFormatter.format_new_rows(worksheet, 2, total_rows, 'ideas')
+                SheetFormatter.ensure_filter_includes_new_data(worksheet, total_rows)
+            
             # Format headers
             worksheet.format('1:1', {
-                'backgroundColor': {'red': 0.8, 'green': 0.9, 'blue': 0.8},
-                'textFormat': {'bold': True}
+                'backgroundColor': {'red': 0.2, 'green': 0.5, 'blue': 0.8},
+                'textFormat': {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}}
             })
+            
+            # Apply column widths
+            SheetFormatter.auto_resize_columns(worksheet, 'ideas')
             
             print(f"Successfully saved {len(ideas)} content ideas to Google Sheets")
             return True

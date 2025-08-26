@@ -22,6 +22,7 @@ class ScrapingStrategy(str, Enum):
     ENHANCED = "enhanced"
     CLOUDSCRAPER = "cloudscraper"
     MCP_PLAYWRIGHT = "mcp_playwright"
+    RSS_FALLBACK = "rss_fallback"
     NONE = "none"
 
 
@@ -115,6 +116,8 @@ class Article:
     author: str = ""
     scraping_strategy: ScrapingStrategy = ScrapingStrategy.NONE
     scraping_success: bool = False
+    extraction_confidence: float = 0.0  # 0.0 to 1.0 confidence score
+    failure_reason: str = ""  # Detailed failure reason if scraping failed
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     word_count: int = 0
@@ -165,6 +168,8 @@ class Article:
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "word_count": self.word_count,
+            "extraction_confidence": self.extraction_confidence,
+            "failure_reason": self.failure_reason,
             "keywords": self.keywords,
             "categories": self.categories
         }
@@ -185,6 +190,8 @@ class Article:
             self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else "",
             self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else "",
             self.word_count,
+            f"{self.extraction_confidence:.2f}" if self.extraction_confidence else "0.00",
+            self.failure_reason,
             ", ".join(self.keywords) if self.keywords else "",
             ", ".join(self.categories) if self.categories else ""
         ]
@@ -206,6 +213,8 @@ class Article:
             "Created At",
             "Updated At",
             "Word Count",
+            "Extraction Confidence",
+            "Failure Reason",
             "Keywords",
             "Categories"
         ]

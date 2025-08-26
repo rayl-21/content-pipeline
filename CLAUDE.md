@@ -21,7 +21,7 @@ The content-pipeline project is a production-ready logistics news monitoring sys
 - **Consolidation**: Reduced from 6 scraper implementations to 1 unified class
 - **Eliminated Special Cases**: Strategy pattern removes all conditional branching for scraper selection
 - **Simplified Main**: Merged `main.py` and `main_enhanced.py` into single entry point
-- **Clean Project Structure**: Organized tests into dedicated directory, removed 10+ redundant files
+- **Clean Project Structure**: Organized tests into dedicated directory, removed redundant files
 - **Enhanced CLI**: Added `--strategy` and `--log-level` arguments for fine-grained control
 
 ### Key Technical Decisions
@@ -335,7 +335,7 @@ src/content_pipeline/           # Main application package
 
 ### Testing Infrastructure
 ```
-tests/                         # All test files
+tests/                             # All test files
 ├── test_standardized_models.py   # Data model validation tests
 ├── test_mcp_scraping.py          # MCP Playwright strategy tests
 ├── test_freightwaves_scraping.py # FreightWaves-specific scraping tests

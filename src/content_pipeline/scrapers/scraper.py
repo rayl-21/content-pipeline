@@ -6,9 +6,10 @@ that eliminates special cases and provides a clean interface for web scraping.
 
 import logging
 import random
+import re
 import time
 from enum import Enum
-from typing import Dict, List, Optional, Any, Callable
+from typing import Dict, List, Optional, Any, Callable, Tuple
 from urllib.parse import urlparse
 
 import requests
@@ -25,6 +26,8 @@ class ScrapingStrategy(Enum):
     ENHANCED = "enhanced"
     CLOUDSCRAPER = "cloudscraper"
     MCP_PLAYWRIGHT = "mcp_playwright"
+    RSS_FALLBACK = "rss_fallback"
+    NONE = "none"
 
 
 class WebScraper:
@@ -83,11 +86,17 @@ class WebScraper:
         # Initialize session
         self.session = self._create_session()
         
-        # Statistics
+        # Enhanced statistics
         self.stats = {
             'total': 0,
             'success': 0,
-            'failed': 0
+            'failed': 0,
+            'rss_fallback': 0,
+            'high_confidence': 0,  # confidence >= 0.7
+            'medium_confidence': 0,  # 0.4 <= confidence < 0.7
+            'low_confidence': 0,  # confidence < 0.4
+            'total_confidence': 0.0,
+            'failure_reasons': {}
         }
     
     def _create_session(self) -> requests.Session:
@@ -105,13 +114,13 @@ class WebScraper:
         return session
     
     def scrape_article(self, article: Article) -> Article:
-        """Scrape a single article.
+        """Scrape a single article with RSS fallback.
         
         Args:
             article: Article object with URL to scrape
             
         Returns:
-            Updated Article object with scraped content
+            Updated Article object with scraped content or RSS fallback
         """
         self.stats['total'] += 1
         
@@ -119,21 +128,82 @@ class WebScraper:
             # Apply delay
             time.sleep(self.delay)
             
-            # Get content based on strategy
-            content = self._scrape_with_strategy(article.url)
+            # Get content based on strategy (now returns tuple)
+            content, confidence = self._scrape_with_strategy(article.url)
             
-            if content:
+            if content and len(content.strip()) > 100:
+                # Full content successfully extracted
                 article.content = content
+                article.scraping_success = True
+                article.scraping_strategy = self.strategy
+                article.extraction_confidence = confidence
+                article.failure_reason = ""
                 self.stats['success'] += 1
-                logger.info(f"Successfully scraped: {article.title[:50]}")
+                
+                # Track confidence levels
+                self.stats['total_confidence'] += confidence
+                if confidence >= 0.7:
+                    self.stats['high_confidence'] += 1
+                elif confidence >= 0.4:
+                    self.stats['medium_confidence'] += 1
+                else:
+                    self.stats['low_confidence'] += 1
+                
+                logger.info(f"Successfully scraped full content (confidence {confidence:.2f}): {article.title[:50]}")
+            elif hasattr(article, 'description') and article.description:
+                # Fallback to RSS description
+                article.content = article.description
+                article.scraping_success = True
+                article.scraping_strategy = ScrapingStrategy.RSS_FALLBACK
+                article.extraction_confidence = 0.3  # Low confidence for RSS fallback
+                article.failure_reason = "Content extraction failed, using RSS description"
+                self.stats['success'] += 1
+                self.stats['rss_fallback'] += 1
+                self.stats['low_confidence'] += 1
+                self.stats['total_confidence'] += 0.3
+                logger.warning(f"Using RSS description as fallback: {article.title[:50]}")
             else:
+                # Complete failure - no content and no description
+                article.content = ""
+                article.scraping_success = False
+                article.scraping_strategy = ScrapingStrategy.NONE
+                article.extraction_confidence = 0.0
+                article.failure_reason = "No content extracted and no RSS description available"
                 self.stats['failed'] += 1
-                logger.warning(f"No content extracted: {article.title[:50]}")
+                
+                # Track failure reason
+                reason = "No RSS fallback"
+                self.stats['failure_reasons'][reason] = self.stats['failure_reasons'].get(reason, 0) + 1
+                
+                logger.error(f"No content extracted and no RSS fallback: {article.title[:50]}")
                 
         except Exception as e:
+            # Handle exceptions with fallback
             self.stats['failed'] += 1
-            logger.error(f"Scraping failed for {article.url}: {e}")
-            article.content = ""
+            error_msg = str(e)
+            logger.error(f"Scraping failed for {article.url}: {error_msg}")
+            
+            # Track failure reason
+            error_type = type(e).__name__
+            self.stats['failure_reasons'][error_type] = self.stats['failure_reasons'].get(error_type, 0) + 1
+            
+            # Try RSS fallback even on exception
+            if hasattr(article, 'description') and article.description:
+                article.content = article.description
+                article.scraping_success = True
+                article.scraping_strategy = ScrapingStrategy.RSS_FALLBACK
+                article.extraction_confidence = 0.3
+                article.failure_reason = f"Scraping error: {error_msg[:200]}, using RSS fallback"
+                self.stats['rss_fallback'] += 1
+                self.stats['low_confidence'] += 1
+                self.stats['total_confidence'] += 0.3
+                logger.warning(f"Using RSS fallback after error: {article.title[:50]}")
+            else:
+                article.content = ""
+                article.scraping_success = False
+                article.scraping_strategy = ScrapingStrategy.NONE
+                article.extraction_confidence = 0.0
+                article.failure_reason = f"Scraping error: {error_msg[:200]}"
             
         return article
     
@@ -161,14 +231,14 @@ class WebScraper:
         self._log_stats()
         return scraped
     
-    def _scrape_with_strategy(self, url: str) -> Optional[str]:
+    def _scrape_with_strategy(self, url: str) -> Tuple[str, float]:
         """Scrape content using the configured strategy.
         
         Args:
             url: URL to scrape
             
         Returns:
-            Extracted content or None
+            Tuple of (extracted content, confidence score)
         """
         strategies = {
             ScrapingStrategy.BASIC: self._scrape_basic,
@@ -182,23 +252,23 @@ class WebScraper:
         # Try with retries
         for attempt in range(self.max_retries):
             try:
-                content = scraper(url)
-                if content:
-                    return content
+                result = scraper(url)
+                if result and result[0]:  # Check if content exists
+                    return result
             except Exception as e:
                 logger.debug(f"Attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries - 1:
                     time.sleep(2 ** attempt)  # Exponential backoff
         
-        return None
+        return "", 0.0
     
-    def _scrape_basic(self, url: str) -> Optional[str]:
+    def _scrape_basic(self, url: str) -> Tuple[str, float]:
         """Basic scraping with requests."""
         response = self.session.get(url, timeout=self.timeout)
         response.raise_for_status()
         return self._extract_content(response.text)
     
-    def _scrape_enhanced(self, url: str) -> Optional[str]:
+    def _scrape_enhanced(self, url: str) -> Tuple[str, float]:
         """Enhanced scraping with user-agent rotation."""
         # Rotate user agent
         self.session.headers['User-Agent'] = random.choice(self.USER_AGENTS)
@@ -211,7 +281,7 @@ class WebScraper:
         response.raise_for_status()
         return self._extract_content(response.text)
     
-    def _scrape_cloudscraper(self, url: str) -> Optional[str]:
+    def _scrape_cloudscraper(self, url: str) -> Tuple[str, float]:
         """Scraping with cloudscraper for Cloudflare bypass."""
         try:
             import cloudscraper
@@ -223,7 +293,7 @@ class WebScraper:
             logger.warning("cloudscraper not installed, falling back to enhanced")
             return self._scrape_enhanced(url)
     
-    def _scrape_mcp_playwright(self, url: str) -> Optional[str]:
+    def _scrape_mcp_playwright(self, url: str) -> Tuple[str, float]:
         """Scraping with MCP Playwright functions."""
         if not self.mcp_functions:
             logger.warning("MCP functions not available, falling back to enhanced")
@@ -246,24 +316,30 @@ class WebScraper:
                 snapshot = snapshot_func()
                 # Extract text from snapshot
                 if isinstance(snapshot, dict):
-                    return snapshot.get('text', '')
-                return str(snapshot)
+                    text = snapshot.get('text', '')
+                    # High confidence for MCP Playwright since it's JS-rendered
+                    confidence = 0.9 if len(text) > 100 else 0.3
+                    return text, confidence
+                text = str(snapshot)
+                confidence = 0.8 if len(text) > 100 else 0.3
+                return text, confidence
                 
         except Exception as e:
             logger.error(f"MCP Playwright failed: {e}")
             
         return self._scrape_enhanced(url)
     
-    def _extract_content(self, html: str) -> str:
-        """Extract article content from HTML.
+    def _extract_content(self, html: str) -> tuple[str, float]:
+        """Extract article content from HTML with confidence scoring.
         
         Args:
             html: Raw HTML content
             
         Returns:
-            Extracted text content
+            Tuple of (extracted text content, confidence score 0.0-1.0)
         """
         soup = BeautifulSoup(html, 'html.parser')
+        confidence = 0.0
         
         # First, check if this is a paywalled or gated content page
         # Look for common paywall indicators
@@ -271,11 +347,19 @@ class WebScraper:
         for indicator in paywall_indicators:
             if soup.select_one(indicator):
                 logger.debug(f"Paywall/gated content detected: {indicator}")
+                confidence = 0.1  # Very low confidence for paywalled content
                 # Still try to extract what's available
                 break
         
+        # Check if this might be a landing/index page (multiple article cards)
+        article_cards = soup.select('.post-card, .article-card, .entry-card')
+        if len(article_cards) > 2:
+            logger.debug(f"Detected landing page with {len(article_cards)} article cards")
+            # This is likely not an article page
+            return "", 0.0
+        
         # Try each selector until we find content
-        for selector in self.CONTENT_SELECTORS:
+        for i, selector in enumerate(self.CONTENT_SELECTORS):
             element = soup.select_one(selector)
             if element:
                 # Remove unwanted elements
@@ -285,9 +369,34 @@ class WebScraper:
                 # Get text and clean it
                 text = element.get_text(separator='\n', strip=True)
                 logger.debug(f"Selector '{selector}' found {len(text)} chars of text")
+                
                 if len(text) > 100:  # Minimum content threshold
-                    logger.debug(f"Using selector '{selector}' for content extraction")
-                    return self._clean_text(text)
+                    # Calculate confidence based on selector priority and content quality
+                    selector_confidence = 1.0 - (i * 0.05)  # Higher priority selectors = higher confidence
+                    
+                    # Content quality checks
+                    word_count = len(text.split())
+                    sentence_count = len(re.split(r'[.!?]+', text))
+                    avg_sentence_length = word_count / max(sentence_count, 1)
+                    
+                    # Confidence factors
+                    length_confidence = min(word_count / 500, 1.0)  # 500+ words = full confidence
+                    structure_confidence = 1.0 if 10 < avg_sentence_length < 30 else 0.7
+                    
+                    # Check for article-like patterns
+                    has_paragraphs = '\n' in text
+                    pattern_confidence = 1.0 if has_paragraphs else 0.8
+                    
+                    confidence = min(
+                        selector_confidence * 0.4 +  # Selector quality
+                        length_confidence * 0.3 +     # Content length
+                        structure_confidence * 0.2 +  # Sentence structure
+                        pattern_confidence * 0.1,      # Article patterns
+                        1.0
+                    )
+                    
+                    logger.debug(f"Using selector '{selector}' with confidence {confidence:.2f}")
+                    return self._clean_text(text), confidence
         
         # Enhanced fallback: Try article.post specifically for FreightCaviar
         article_post = soup.select_one('article.post')
@@ -298,15 +407,10 @@ class WebScraper:
             text = article_post.get_text(separator='\n', strip=True)
             logger.debug(f"article.post selector found {len(text)} chars")
             if len(text) > 100:
-                logger.debug("Using article.post for content extraction")
-                return self._clean_text(text)
-        
-        # Check if this might be a landing/index page (multiple article cards)
-        article_cards = soup.select('.post-card, .article-card, .entry-card')
-        if len(article_cards) > 2:
-            logger.debug(f"Detected landing page with {len(article_cards)} article cards")
-            # This is likely not an article page, return empty
-            return ""
+                word_count = len(text.split())
+                confidence = min(word_count / 500, 0.6)  # Max 0.6 confidence for fallback
+                logger.debug(f"Using article.post fallback with confidence {confidence:.2f}")
+                return self._clean_text(text), confidence
         
         # Fallback: get all paragraphs
         paragraphs = soup.find_all('p')
@@ -318,18 +422,22 @@ class WebScraper:
                 text = '\n'.join(p.get_text(strip=True) for p in valid_paragraphs)
                 logger.debug(f"Valid paragraphs contain {len(text)} chars of text")
                 if len(text) > 100:
-                    return self._clean_text(text)
+                    word_count = len(text.split())
+                    confidence = min(word_count / 500, 0.5)  # Max 0.5 confidence for paragraph fallback
+                    return self._clean_text(text), confidence
         
         # Final fallback: Check for any content div/section
         content_containers = soup.select('div.content, section.content, div.article-body, section.article-body')
         for container in content_containers:
             text = container.get_text(separator='\n', strip=True)
             if len(text) > 100:
-                logger.debug(f"Found content in fallback container: {len(text)} chars")
-                return self._clean_text(text)
+                word_count = len(text.split())
+                confidence = min(word_count / 500, 0.4)  # Max 0.4 confidence for generic container
+                logger.debug(f"Found content in fallback container: {len(text)} chars, confidence {confidence:.2f}")
+                return self._clean_text(text), confidence
         
         logger.warning("No content could be extracted from any selector")
-        return ""
+        return "", 0.0
     
     def _clean_text(self, text: str) -> str:
         """Clean extracted text.
@@ -351,12 +459,24 @@ class WebScraper:
         return '\n'.join(lines)
     
     def _log_stats(self):
-        """Log scraping statistics."""
+        """Log detailed scraping statistics."""
         total = self.stats['total']
         if total > 0:
             success_rate = (self.stats['success'] / total) * 100
+            avg_confidence = self.stats['total_confidence'] / max(self.stats['success'], 1)
+            
             logger.info(f"Scraping complete: {self.stats['success']}/{total} "
                        f"successful ({success_rate:.1f}%)")
+            logger.info(f"Average confidence: {avg_confidence:.2f}")
+            logger.info(f"Confidence breakdown - High: {self.stats['high_confidence']}, "
+                       f"Medium: {self.stats['medium_confidence']}, "
+                       f"Low: {self.stats['low_confidence']}")
+            logger.info(f"RSS fallbacks used: {self.stats['rss_fallback']}")
+            
+            if self.stats['failure_reasons']:
+                logger.info("Failure reasons:")
+                for reason, count in self.stats['failure_reasons'].items():
+                    logger.info(f"  - {reason}: {count}")
     
     def get_stats(self) -> Dict[str, Any]:
         """Get scraping statistics.

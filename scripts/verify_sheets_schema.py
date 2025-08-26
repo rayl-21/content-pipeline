@@ -32,6 +32,9 @@ def verify_schema():
     
     print("✓ Connected successfully\n")
     
+    # Import Article model to get the current schema
+    from src.content_pipeline.core.models import Article
+    
     # Check Articles sheet
     print("📋 Articles Sheet:")
     try:
@@ -39,18 +42,29 @@ def verify_schema():
         headers = worksheet.row_values(1)
         data_rows = len(worksheet.get_all_values()) - 1  # Subtract header row
         
-        expected_headers = [
-            "ID", "URL", "Title", "Description", "Content", "Author",
-            "Published Date", "Source Feed", "Scraping Strategy",
-            "Scraping Success", "Created At", "Updated At",
-            "Word Count", "Keywords", "Categories"
-        ]
+        # Get expected headers from the Article model
+        expected_headers = Article.sheet_headers()
         
         if headers == expected_headers:
             print(f"  ✓ Headers match standardized schema ({len(headers)} columns)")
         else:
-            print(f"  ✗ Headers don't match. Expected: {expected_headers}")
-            print(f"    Got: {headers}")
+            print(f"  ⚠️  Headers mismatch detected!")
+            print(f"  Expected {len(expected_headers)} columns: {expected_headers}")
+            print(f"  Found {len(headers)} columns: {headers}")
+            
+            # Identify missing and extra columns
+            missing = set(expected_headers) - set(headers)
+            extra = set(headers) - set(expected_headers)
+            
+            if missing:
+                print(f"  Missing columns: {list(missing)}")
+            if extra:
+                print(f"  Extra columns: {list(extra)}")
+            
+            # Check if it's just missing the new fields
+            if missing == {"Extraction Confidence", "Failure Reason"}:
+                print("\n  ℹ️  The sheet is missing the new extraction_confidence and failure_reason fields.")
+                print("     Run the migration script to update the schema.")
         
         print(f"  📊 Data rows: {data_rows}")
         

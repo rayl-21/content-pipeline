@@ -111,10 +111,30 @@ class ContentPipeline:
         scraped_articles = self.web_scraper.scrape_articles(all_articles)
         print("✅ Content scraping completed")
         
-        # Log scraping statistics
+        # Log enhanced scraping statistics
         stats = self.web_scraper.get_stats()
         success_rate = (stats['success'] / stats['total'] * 100) if stats['total'] > 0 else 0
-        print(f"📊 Scraping stats: {stats['success']}/{stats['total']} successful ({success_rate:.1f}%)")
+        avg_confidence = stats.get('total_confidence', 0) / max(stats.get('success', 1), 1)
+        
+        print(f"\n📊 Scraping Statistics:")
+        print(f"   Total: {stats['total']} articles")
+        print(f"   Success: {stats['success']} ({success_rate:.1f}%)")
+        print(f"   Failed: {stats.get('failed', 0)}")
+        print(f"   RSS Fallbacks: {stats.get('rss_fallback', 0)}")
+        print(f"   Average Confidence: {avg_confidence:.2f}")
+        
+        # Show confidence breakdown
+        if stats.get('high_confidence', 0) or stats.get('medium_confidence', 0) or stats.get('low_confidence', 0):
+            print(f"   Confidence Breakdown:")
+            print(f"      High (≥0.7): {stats.get('high_confidence', 0)}")
+            print(f"      Medium (0.4-0.7): {stats.get('medium_confidence', 0)}")
+            print(f"      Low (<0.4): {stats.get('low_confidence', 0)}")
+        
+        # Show failure reasons if any
+        if stats.get('failure_reasons'):
+            print(f"   Failure Reasons:")
+            for reason, count in stats['failure_reasons'].items():
+                print(f"      {reason}: {count}")
         
         # Step 4: Generate content ideas
         print("\n💡 Generating content ideas...")
